@@ -1,13 +1,18 @@
 from flask import Flask, request, jsonify
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
+import configparser
+
+# initialize config.ini
+config = configparser.ConfigParser()
+config.read("config.ini")
 
 # Initialize the Flask app
 app = Flask("modelserver")
 
 # Load the model and tokenizer once, when the server starts
 print("Loading the model...")
-model_name = "../python_exp/models/deepseek-coder-1.3b-instruct"
+model_name = config["model"]["path"]
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 model = AutoModelForCausalLM.from_pretrained(model_name).to(device)
@@ -69,3 +74,4 @@ def health_check():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
