@@ -1,13 +1,20 @@
 import requests
-url = "http://localhost:5000/generate"  # Server URL
 import sys
 import time
 import threading
 import signal
 import re
 import subprocess
+import configparser
 
+# flag for mode switching
+useLLM = True
 
+# initialize config.ini
+config = configparser.ConfigParser()
+config.read("config.ini")
+
+url = "http://" + config["settings"]["host"] + ":" + config["settings"]["port"] + "/generate"  # Server URL
 
 def handle_exit_signal(signal, frame):
     print("\nExiting...")
@@ -48,6 +55,7 @@ def parse_command(generated_text):
     command = match.group(1).strip() if match else None
     return command
 
+# to do: handle <None> command
 def run_command(command):
     result = subprocess.run(command, shell=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if(result.stdout):
@@ -58,38 +66,60 @@ def run_command(command):
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, handle_exit_signal)
     print("Welcome to the first intelligent terminal!")
-    print("Type 'exit' to quit.")
+    print("- Type 'exit' to quit.")
+    print("- Type 'manual' for executing shell commands directly.")
+    print("- Type 'assist' for magic.")
 
     while True:
         try:
-            input_text = input("$ ")
+            input_text = input("$ ").strip()
 
             if input_text.lower() == "exit":
                 print("Exiting...")
                 break
             
-            stop_event = threading.Event()
-            loader_thread = threading.Thread(target=show_loader, args=(stop_event,))
-            loader_thread.start()
-
-            input_text = "Give the linux command to " + input_text 
-            generated_text = generate_text(input_text, max_length=100, temperature=0.8, top_k=50)
-
-            stop_event.set()
-            loader_thread.join()
-
-            sys.stdout.write("\r")  # Clear the loading spinner
-            sys.stdout.flush()
-
-            command = parse_command(generated_text)
-
-            # print(generated_text)
-            skip = input(f"The following command will be executed: <{command}>")
-            if skip != "":  # If user pressed anything other than Enter
-                print("Cool you the human here.")
+            # handle blank spaces
+            if input_text == "":
+                print("There are other keys as well you know.")
                 continue
 
-            run_command(command)
+            if input_text.lower() == "manual":
+                print("Starting manual mode...")
+                useLLM = False
+                continue
+
+            if input_text.lower() == "assist":
+                print("Starting assisted mode...")
+                useLLM = True
+                continue
+            
+            if useLLM:
+                stop_event = threading.Event()
+                loader_thread = threading.Thread(target=show_loader, args=(stop_event,))
+                loader_thread.start()
+
+                input_text = "Give the linux command to " + input_text 
+                generated_text = generate_text(input_text, max_length=100, temperature=0.8, top_k=50)
+
+                stop_event.set()
+                loader_thread.join()
+
+                sys.stdout.write("\r")  # Clear the loading spinner
+                sys.stdout.flush()
+
+                command = parse_command(generated_text)
+
+                # print(generated_text)
+                skip = input(f"The following command will be executed: <{command}>")
+                if skip != "":  # If user pressed anything other than Enter
+                    print("Cool you the human here.")
+                    continue
+
+                run_command(command)
+
+            # directly run shell command that user provides
+            else:
+                run_command(input_text)
 
         except KeyboardInterrupt:
             # Catch the Ctrl+C signal and exit
